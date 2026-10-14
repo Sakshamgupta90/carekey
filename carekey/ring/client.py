@@ -33,14 +33,23 @@ class RingClient(Protocol):
 
 
 class LiveRingClient:
-    def __init__(self, base_url: str, access_token: str, timeout: float = 10.0) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        access_token: str,
+        timeout: float = 10.0,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
         if not access_token:
             raise RingError("RING_ACCESS_TOKEN is empty. Get a token from the Ring Playground.")
         self._http = httpx.Client(
             base_url=base_url,
             timeout=timeout,
             headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+            transport=transport,
         )
+        # Media downloads live on another host: no token, follow redirects.
+        self._media = httpx.Client(timeout=20.0, follow_redirects=True, transport=transport)
 
     def _request(self, method: str, path: str, **kwargs) -> httpx.Response:
         delay = 1.0
@@ -66,24 +75,35 @@ class LiveRingClient:
         return [e for e in events if e is not None]
 
     def snapshot(self, device_id: str, at_ms: int) -> bytes | None:
+        """Image of the moment ``at_ms``, or None if Ring has no media for it.
+
+        Observed against the Playground: Ring answers 303 with a Location on a
+        separate download host (no bearer token needed there), which returns the
+        image, or 416 MEDIA_NOT_FOUND when nothing was recorded at that time.
+        """
         resp = self._request(
             "POST",
             f"/v1/devices/{device_id}/media/image/download",
             json={"type": "at_timestamp", "timestamp": at_ms},
         )
-        content_type = resp.headers.get("Content-Type", "")
-        if content_type.startswith("image/"):
+        location = resp.headers.get("Location")
+        if resp.is_redirect and location:
+            # Never forward our Ring token to the download host.
+            resp = self._media.get(location)
+            if resp.status_code == 416:
+                return None
+            if resp.status_code >= 400:
+                raise RingError(f"Snapshot download failed: {resp.status_code} {resp.text[:300]}")
+        if resp.headers.get("Content-Type", "").startswith("image/"):
             return resp.content
-        # The reference doesn't show the response shape; if it returns JSON with a
-        # download URL instead of bytes, follow it.
+        # Fallback in case Ring returns JSON with a download URL instead.
         try:
-            body = resp.json()
+            url = _find_url(resp.json())
         except ValueError:
             return None
-        url = _find_url(body)
         if not url:
             return None
-        media = httpx.get(url, timeout=10.0)
+        media = self._media.get(url)
         return media.content if media.status_code == 200 else None
 
 

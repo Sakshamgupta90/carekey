@@ -36,3 +36,12 @@ Entries 1–3 are drafts from reading the API reference. Confirm each against th
 - **Suggestion:** List each environment's base URL in one table.
 
 <!-- Add entries below as they happen: Playground, Bedrock, Strands, AgentCore, Fire TV / Vega. -->
+
+### 4. Snapshot download returns an undocumented 303 redirect
+
+- **Task:** Download a snapshot from the Playground device to send to Amazon Bedrock.
+- **Steps:** `POST /v1/devices/{id}/media/image/download` with `{"type": "at_timestamp", "timestamp": <ms>}`.
+- **Expected vs actual:** Expected image bytes. Got `HTTP 303` with an empty body and a `Location` on a different host (`download-ap-northeast-1.prod.phoenix.devices.amazon.dev`). Following it returned `416 MEDIA_NOT_FOUND` because nothing had been recorded at that time.
+- **Severity:** Medium (an HTTP client that doesn't follow redirects silently gets nothing).
+- **Workaround:** Follow the redirect manually, without forwarding the bearer token to the download host; treat 416 as "no image".
+- **Suggestion:** Document the 303 + download-host flow and the 416 response in the Image Snapshots section, with an example.
