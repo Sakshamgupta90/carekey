@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CareKey · Visitor check-in</title>
+  <link rel="stylesheet" href="/app.css">
+  <style>
+    main { max-width: 420px; }
+    #code-input { font-size: 32px; letter-spacing: 8px; text-align: center; padding: 14px; }
+    .big-btn { width: 100%; font-size: 20px; padding: 14px; margin-top: 12px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Visitor check-in</h1>
+  <p class="sub">Ring the doorbell first, then enter the code you were given.</p>
+
+  <form id="checkin-form" class="card">
+    <label for="code-input">Your one-time code</label>
+    <input id="code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required>
+    <p id="code-error" class="hidden" style="color:var(--crit);font-size:14px;margin:6px 0 0" role="alert">Enter all 6 digits.</p>
+    <button class="primary big-btn" type="submit">Check in</button>
+  </form>
+
+  <div id="result" class="banner hidden" role="status" style="margin-top:16px"></div>
+
+  <div id="leave" class="card hidden" style="margin-top:16px">
+    <p style="margin-top:0">When you've finished, check out so the door locks and the family knows you've left.</p>
+    <button class="big-btn" id="leave-btn">I'm leaving</button>
+  </div>
+</main>
+<script src="/common.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const VISIT_KEY = "carekey.visit";
+
+function show(text, tone) {
+  $("result").textContent = text;
+  $("result").className = `banner ${tone}`;
+}
+
+function currentVisit() {
+  try { return localStorage.getItem(VISIT_KEY); } catch { return null; }
+}
+
+$("code-input").addEventListener("input", () => $("code-error").classList.add("hidden"));
+
+$("checkin-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const code = $("code-input").value.trim();
+  if (!/^\d{6}$/.test(code)) { $("code-error").classList.remove("hidden"); return; }
+  const d = await CareKey.api("/api/checkin", { code });
+  if (d.granted) {
+    show("Welcome. The door is unlocked for two minutes.", "ok");
+    try { localStorage.setItem(VISIT_KEY, d.visit_id); } catch {}
+    $("leave").classList.remove("hidden");
+    $("checkin-form").classList.add("hidden");
+  } else {
+    show(d.reason, "warning");
+  }
+});
+
+$("leave-btn").addEventListener("click", async () => {
+  const id = currentVisit();
+  if (!id) return;
+  try {
+    await CareKey.api(`/api/visits/${id}/checkout`, {});
+    show("Thank you. You're checked out and the door is locked.", "ok");
+  } catch {
+    show("You're already checked out.", "warning");
+  }
+  try { localStorage.removeItem(VISIT_KEY); } catch {}
+  $("leave").classList.add("hidden");
+});
+
+if (currentVisit()) $("leave").classList.remove("hidden");
+</script>
+</body>
+</html>

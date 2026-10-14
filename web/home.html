@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CareKey · Home</title>
+  <link rel="stylesheet" href="/app.css">
+  <style>
+    body { font-size: 24px; }
+    main { max-width: 1200px; }
+    h1 { font-size: 40px; }
+    .status { font-size: 30px; margin: 0 0 24px; }
+    .actions { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+    .actions button { font-size: 26px; padding: 28px 20px; border-width: 2px; border-radius: 16px; text-align: left; }
+    .actions button:focus-visible { outline-width: 5px; }
+    .answer { font-size: 30px; min-height: 2.5em; margin: 24px 0; }
+    .overlay {
+      position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column;
+      justify-content: center; padding: 48px; gap: 24px; z-index: 10;
+    }
+    .overlay .big { font-size: 56px; line-height: 1.2; font-weight: 600; margin: 0; }
+    .overlay .pill { font-size: 28px; padding: 6px 20px; align-self: flex-start; }
+    .overlay button { font-size: 28px; padding: 20px 28px; align-self: flex-start; }
+    #ask-input { font-size: 26px; padding: 16px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1 id="greeting">Hello</h1>
+  <p class="status" id="status">The front door is locked.</p>
+  <p class="answer" id="answer" aria-live="polite"></p>
+
+  <div class="actions" id="actions">
+    <button data-q="Who was at the door?">Who was at the door?</button>
+    <button data-q="Is my parcel still outside?">Is my parcel outside?</button>
+    <button data-q="Who is visiting today?">Who is visiting today?</button>
+    <button id="ok-btn">I'm OK today</button>
+    <button id="voice-btn">Ask by voice</button>
+  </div>
+
+  <form id="ask-form" class="row" style="margin-top:16px">
+    <label for="ask-input" class="hidden">Type a question</label>
+    <input id="ask-input" placeholder="Or type a question" style="flex:1">
+    <button class="primary" type="submit" style="font-size:26px;padding:16px 24px">Ask</button>
+  </form>
+
+</main>
+
+<div class="overlay hidden" id="overlay" role="alertdialog" aria-labelledby="overlay-text">
+  <span class="pill" id="overlay-pill">Front door</span>
+  <p class="big" id="overlay-text"></p>
+  <button id="overlay-close">OK</button>
+</div>
+
+<script src="/common.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let state = null;
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+function say(text) {
+  $("answer").textContent = text;
+  CareKey.speak(text);
+}
+
+function showOverlay(text, tone = "info", label = "Front door") {
+  $("overlay-text").textContent = text;
+  $("overlay-pill").textContent = label;
+  $("overlay-pill").className = `pill ${tone}`;
+  $("overlay").classList.remove("hidden");
+  $("overlay-close").focus();
+  CareKey.speak(text);
+}
+
+$("overlay-close").addEventListener("click", () => {
+  $("overlay").classList.add("hidden");
+  $("actions").querySelector("button").focus();
+});
+
+async function ask(question) {
+  $("answer").textContent = "Let me check…";
+  try {
+    const { answer } = await CareKey.api("/api/ask", { question });
+    say(answer);
+  } catch {
+    say("Sorry, I couldn't check right now.");
+  }
+}
+
+document.querySelectorAll("[data-q]").forEach((b) => b.addEventListener("click", () => ask(b.dataset.q)));
+$("ask-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const q = $("ask-input").value.trim();
+  if (q) ask(q);
+});
+$("ok-btn").addEventListener("click", async () => {
+  await CareKey.api("/api/parent/ok", {});
+  say(`Thank you. I've let ${state?.family_name || "your family"} know you're OK.`);
+});
+
+// Voice input where the browser supports it.
+const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (Recognition) {
+  $("voice-btn").addEventListener("click", () => {
+    const rec = new Recognition();
+    rec.lang = "en-US";
+    rec.onresult = (e) => ask(e.results[0][0].transcript);
+    rec.onerror = () => say("Sorry, I didn't catch that.");
+    say("I'm listening.");
+    rec.start();
+  });
+} else {
+  $("voice-btn").classList.add("hidden");
+}
+
+// Arrow keys move between buttons (remote control / D-pad friendly).
+document.addEventListener("keydown", (e) => {
+  if (!["ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp"].includes(e.key)) return;
+  if (document.activeElement?.tagName === "INPUT") return;
+  const buttons = [...document.querySelectorAll("button:not(.hidden)")].filter((b) => b.offsetParent);
+  const i = buttons.indexOf(document.activeElement);
+  const step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : -1;
+  buttons[(i + step + buttons.length) % buttons.length]?.focus();
+  e.preventDefault();
+});
+
+function render(s) {
+  state = s;
+  CareKey.tz = s.timezone;
+  $("greeting").textContent = `Hello, ${s.parent_name}`;
+  const parts = [s.lock.unlocked ? "The front door is unlocked for a visitor." : "The front door is locked."];
+  const next = s.visits.find((v) => v.status === "in_progress") || s.visits.find((v) => ["due", "upcoming"].includes(v.status));
+  if (next) {
+    parts.push(next.status === "in_progress"
+      ? `${cap(next.role)} ${next.visitor_name} is here.`
+      : `${cap(next.role)} ${next.visitor_name} is due at ${CareKey.clock(next.start)}.`);
+  }
+  $("status").textContent = parts.join(" ");
+}
+
+async function refresh() { render(await CareKey.api("/api/state")); }
+
+CareKey.live((msg) => {
+  if (msg.type === "door_event") {
+    const e = msg.event;
+    const tone = e.urgency === "urgent" ? "critical" : e.urgency === "attention" ? "warning" : "info";
+    showOverlay(e.description || "Someone is at the front door.", tone, "Front door");
+  } else if (msg.type === "access" && msg.granted) {
+    showOverlay(`${cap(msg.visitor)} is here and coming in. The door is unlocked for two minutes.`, "ok", "Visitor");
+  } else if (msg.type === "timeline" && msg.entry.kind === "alert" && msg.entry.text.includes("without ringing")) {
+    showOverlay("Someone is at the door but hasn't rung the bell. The door stays locked.", "warning", "Front door");
+  }
+  refresh();
+});
+refresh().then(() => $("actions").querySelector("button").focus());
+</script>
+</body>
+</html>

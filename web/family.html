@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CareKey · Family</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<main>
+  <h1>CareKey</h1>
+  <p class="sub" id="subtitle">Your view of the front door</p>
+
+  <div id="alert-banner" class="banner hidden" role="alert"></div>
+
+  <div class="grid">
+    <section class="card" aria-labelledby="door-h">
+      <h2 id="door-h">Front door</h2>
+      <p><span id="lock-pill" class="pill ok">Locked</span></p>
+      <p id="last-event" class="muted">No activity yet today.</p>
+    </section>
+
+    <section class="card" aria-labelledby="visits-h">
+      <h2 id="visits-h">Today's visits</h2>
+      <ul id="visits" class="timeline"></ul>
+    </section>
+
+    <section class="card" aria-labelledby="book-h">
+      <h2 id="book-h">Book a visit</h2>
+      <form id="book-form">
+        <label for="v-name">Visitor's name</label>
+        <input id="v-name" required maxlength="80" placeholder="Priya">
+        <label for="v-role">Role</label>
+        <select id="v-role">
+          <option>nurse</option><option>carer</option><option>cleaner</option><option>delivery</option><option>other</option>
+        </select>
+        <div class="row" style="margin-top:8px">
+          <div style="flex:1"><label for="v-start">Starts at</label><input id="v-start" type="time" required></div>
+          <div style="flex:1"><label for="v-mins">Minutes</label><input id="v-mins" type="number" min="5" max="480" value="45" required></div>
+        </div>
+        <p style="margin-top:12px"><button class="primary" type="submit">Book and get code</button></p>
+      </form>
+      <div id="code-box" class="hidden">
+        <p class="muted" style="margin:8px 0 0">One-time code for <span id="code-who"></span>. Share it with them only.</p>
+        <p class="code" id="code"></p>
+      </div>
+      <p id="book-error" class="muted hidden" role="alert"></p>
+    </section>
+
+    <section class="card" aria-labelledby="tl-h" style="grid-column: 1 / -1">
+      <h2 id="tl-h">Timeline</h2>
+      <ul id="timeline" class="timeline"></ul>
+    </section>
+
+    <section class="card hidden" id="demo" aria-labelledby="demo-h" style="grid-column: 1 / -1">
+      <h2 id="demo-h">Demo controls</h2>
+      <p class="muted">Sends simulated Ring events through the same signed webhook path as real ones.</p>
+      <div class="row">
+        <button data-event="doorbell">Doorbell pressed</button>
+        <button data-event="person">Person at door</button>
+        <button data-event="package">Parcel delivered</button>
+        <button data-event="door_open">Door opened</button>
+        <button data-advance="20">Skip 20 minutes</button>
+        <button data-advance="60">Skip 1 hour</button>
+      </div>
+    </section>
+  </div>
+</main>
+<script src="/common.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+
+function renderTimeline(items) {
+  $("timeline").innerHTML = items.map((t) =>
+    `<li class="${t.severity}"><time>${CareKey.clock(t.ts)}</time><span>${CareKey.escape(t.text)}</span></li>`
+  ).join("") || `<li class="muted">Nothing yet.</li>`;
+}
+
+const STATUS_PILL = { upcoming: "info", due: "info", late: "warning", in_progress: "ok", completed: "ok", missed: "critical" };
+const STATUS_TEXT = { upcoming: "Upcoming", due: "Due now", late: "Late", in_progress: "Here now", completed: "Done", missed: "Missed" };
+
+function renderVisits(visits) {
+  $("visits").innerHTML = visits.map((v) => `
+    <li>
+      <time>${CareKey.clock(v.start)}</time>
+      <span style="flex:1">${CareKey.escape(v.role.charAt(0).toUpperCase() + v.role.slice(1))} ${CareKey.escape(v.visitor_name)}</span>
+      <span class="pill ${STATUS_PILL[v.status]}">${STATUS_TEXT[v.status]}</span>
+      ${v.status === "in_progress" ? `<button data-checkout="${v.id}">Check out</button>` : ""}
+    </li>`).join("") || `<li class="muted">No visits booked.</li>`;
+}
+
+function render(state) {
+  CareKey.tz = state.timezone;
+  $("subtitle").textContent = `${state.family_name}'s view of ${state.parent_name}'s front door`;
+  const lock = $("lock-pill");
+  lock.textContent = state.lock.unlocked ? `Unlocked until ${CareKey.clock(state.lock.unlocked_until)}` : "Locked";
+  lock.className = `pill ${state.lock.unlocked ? "warning" : "ok"}`;
+  const last = state.events[0];
+  $("last-event").textContent = last ? `${CareKey.clock(last.ts)} · ${last.description || "Activity"}` : "No activity yet today.";
+  renderVisits(state.visits);
+  renderTimeline(state.timeline);
+  // Show up to three recent alerts that need attention, most serious first.
+  const since = new Date(state.now).getTime() - 12 * 3600 * 1000;
+  const rank = { critical: 0, warning: 1 };
+  const alerts = state.timeline
+    .filter((t) => t.kind === "alert" && t.severity !== "info" && new Date(t.ts).getTime() >= since)
+    .sort((a, b) => rank[a.severity] - rank[b.severity])
+    .slice(0, 3);
+  const banner = $("alert-banner");
+  if (alerts.length) {
+    banner.className = `banner ${alerts[0].severity}`;
+    banner.innerHTML = alerts.map((a) => `<div>${CareKey.escape(a.text)}</div>`).join("");
+  } else {
+    banner.className = "banner hidden";
+  }
+  $("demo").classList.toggle("hidden", !state.demo_enabled);
+}
+
+async function refresh() { render(await CareKey.api("/api/state")); }
+
+$("book-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const [h, m] = $("v-start").value.split(":").map(Number);
+  const start = new Date();
+  start.setHours(h, m, 0, 0);
+  const end = new Date(start.getTime() + Number($("v-mins").value) * 60000);
+  try {
+    const res = await CareKey.api("/api/visits", {
+      visitor_name: $("v-name").value, role: $("v-role").value,
+      start: start.toISOString(), end: end.toISOString(),
+    });
+    $("code").textContent = res.code;
+    $("code-who").textContent = `${res.visit.role} ${res.visit.visitor_name}`;
+    $("code-box").classList.remove("hidden");
+    $("book-error").classList.add("hidden");
+    refresh();
+  } catch (err) {
+    $("book-error").textContent = err.message;
+    $("book-error").classList.remove("hidden");
+  }
+});
+
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  if (b.dataset.event) await CareKey.api("/api/demo/event", { kind: b.dataset.event });
+  else if (b.dataset.advance) await CareKey.api("/api/demo/advance", { minutes: Number(b.dataset.advance) });
+  else if (b.dataset.checkout) await CareKey.api(`/api/visits/${b.dataset.checkout}/checkout`, {});
+  else return;
+  refresh();
+});
+
+const now = new Date();
+$("v-start").value = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+CareKey.live(() => refresh());
+refresh();
+</script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+[project]
+name = "carekey"
+version = "0.1.0"
+description = "Lets the right people into an older person's home. Built on Ring."
+requires-python = ">=3.12"
+dependencies = [
+    "boto3>=1.43.113",
+    "fastapi>=0.143.0",
+    "httpx>=0.28.1",
+    "pydantic>=2.14.1",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.optional-dependencies]
+agent = [
+    "strands-agents>=1.60.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
