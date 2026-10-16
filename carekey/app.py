@@ -157,8 +157,9 @@ def create_app(settings: Settings | None = None, service: CareKey | None = None)
             "data": {"id": f"{device}_{ring_type}_{ms}", "type": ring_type, "attributes": attrs},
         }
         raw = json.dumps(payload).encode()
-        # Same verification path as a real Ring webhook.
-        if not verify_signature(raw, sign(raw, signing_key), signing_key):
+        # Same signing and parsing path as a real Ring webhook, with a demo-only key
+        # so the demo works in live mode too. Real webhooks still need RING_HMAC_KEY.
+        if not verify_signature(raw, sign(raw, DEMO_KEY), DEMO_KEY):
             raise HTTPException(500, "Signing failed.")
         event = ck.handle_webhook_body(raw)
         return {"event": event.model_dump(mode="json") if event else None}

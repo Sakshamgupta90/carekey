@@ -79,3 +79,14 @@ def test_ask_endpoint(ck):
     c.post("/api/demo/event", json={"kind": "package"})
     answer = c.post("/api/ask", json={"question": "Is my parcel outside?"}).json()["answer"]
     assert answer.startswith("Yes")
+
+
+def test_demo_events_work_in_live_mode_without_webhook_key(ck):
+    from dataclasses import replace
+
+    ck.settings = replace(ck.settings, ring_mode="live", ring_hmac_key="")
+    c = TestClient(create_app(ck.settings, ck))
+    assert c.post("/api/demo/event", json={"kind": "doorbell"}).status_code == 200
+    # Real webhooks are refused until a signing key is configured.
+    r = c.post("/webhooks/ring", content=b"{}", headers={"X-Signature": "sha256=x"})
+    assert r.status_code == 500
