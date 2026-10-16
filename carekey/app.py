@@ -130,6 +130,14 @@ def create_app(settings: Settings | None = None, service: CareKey | None = None)
     def ask(body: Question):
         return {"answer": ck.ask(body.question)}
 
+    @app.post("/api/ring/sync")
+    def ring_sync():
+        """Pull new events from Ring Event History now."""
+        try:
+            return {"new_events": ck.poll_history()}
+        except Exception as exc:
+            raise HTTPException(502, f"Couldn't reach Ring: {exc}") from exc
+
     @app.post("/api/tick")
     def tick():
         return [a.model_dump(mode="json") for a in ck.tick()]

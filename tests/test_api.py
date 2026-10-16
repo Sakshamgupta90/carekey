@@ -90,3 +90,19 @@ def test_demo_events_work_in_live_mode_without_webhook_key(ck):
     # Real webhooks are refused until a signing key is configured.
     r = c.post("/webhooks/ring", content=b"{}", headers={"X-Signature": "sha256=x"})
     assert r.status_code == 500
+
+
+def test_ring_sync_endpoint(ck, clock):
+    from carekey.models import DoorEvent, EventKind
+
+    class History:
+        def history(self, device_id, event_types=None):
+            return [DoorEvent(id="h1", device_id=device_id, kind=EventKind.BUTTON_PRESS, ts=clock())]
+
+        def snapshot(self, device_id, at_ms):
+            return None
+
+    ck.ring = History()
+    c = client_for(ck)
+    assert c.post("/api/ring/sync").json() == {"new_events": 1}
+    assert c.post("/api/ring/sync").json() == {"new_events": 0}
