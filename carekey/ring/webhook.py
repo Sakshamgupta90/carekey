@@ -36,6 +36,7 @@ _KIND_BY_TYPE = {
     "motion": EventKind.MOTION,
     "button_press": EventKind.BUTTON_PRESS,
     "ding": EventKind.BUTTON_PRESS,
+    "on_demand": EventKind.LIVE_VIEW,
     "contact_sensor_faulted": EventKind.DOOR_OPENED,
     "contact_sensor_cleared": EventKind.DOOR_CLOSED,
 }

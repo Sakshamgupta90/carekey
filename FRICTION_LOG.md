@@ -45,3 +45,21 @@ Entries 1–3 are drafts from reading the API reference. Confirm each against th
 - **Severity:** Medium (an HTTP client that doesn't follow redirects silently gets nothing).
 - **Workaround:** Follow the redirect manually, without forwarding the bearer token to the download host; treat 416 as "no image".
 - **Suggestion:** Document the 303 + download-host flow and the 416 response in the Image Snapshots section, with an example.
+
+### 5. Playground simulations create live-view events only
+
+- **Task:** Trigger a doorbell press or motion event from the Playground to test an event-driven app.
+- **Steps:** Playground → "Simulate live view event" → Package (also tried earlier: Motion).
+- **Expected vs actual:** Expected a `motion` (or `ding`) event in Event History, or a webhook. Got only an `on_demand` history event with no detection subtype and empty `cv_detections`. Snapshots from that time window do work (watermarked JPEG via the 303 download flow).
+- **Severity:** High for event-driven apps: there's no way to test `motion_detected` / `button_press` handling without a physical device.
+- **Workaround:** Treat `on_demand` events as scenes: fetch a frame 5 s in and classify it with Amazon Bedrock (parcel → package event, person → motion event).
+- **Suggestion:** Let the Playground fire synthetic `motion_detected` (with `sub_type`) and `button_press` events into Event History and to a registered webhook URL.
+
+### 6. Amazon Bedrock daily token quota on a new account
+
+- **Task:** Describe one Ring snapshot with Amazon Bedrock (Converse API).
+- **Steps:** Called `converse` with Claude Sonnet 4.5, then Amazon Nova 2 Lite, in us-east-1.
+- **Expected vs actual:** Expected a description. Both returned `ThrottlingException: Too many tokens per day` on the first call of the session; Claude Haiku 5.5 returned `AccessDeniedException` (not available for this account).
+- **Severity:** High (blocks the AI step entirely for the day).
+- **Workaround:** App falls back to offline descriptions; requested a quota increase.
+- **Suggestion:** Show the daily token quota and its reset time in the Bedrock console next to each model, and give new hackathon accounts a usable default.

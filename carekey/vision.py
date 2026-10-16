@@ -18,7 +18,7 @@ anyone is, and never comment on age, race, gender or appearance beyond clothing.
 - If the image is unclear, say so plainly.
 
 Reply with JSON only:
-{"description": "...", "category": "delivery|visitor|carer|package|nobody|unknown", \
+{"description": "...", "category": "delivery|visitor|carer|package|vehicle|nobody|unknown", \
 "urgency": "routine|attention|urgent"}"""
 
 
@@ -47,6 +47,12 @@ class FakeDescriber:
                 "description": "A person is standing at the front door.",
                 "category": "visitor",
                 "urgency": "attention",
+            }
+        if event.kind is EventKind.LIVE_VIEW:
+            return {
+                "description": "The front door camera was checked.",
+                "category": "unknown",
+                "urgency": "routine",
             }
         if event.kind is EventKind.DOOR_OPENED:
             return {"description": "The front door was opened.", "category": "unknown", "urgency": "routine"}

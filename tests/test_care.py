@@ -125,3 +125,28 @@ def test_visit_status_shows_late(ck, clock):
     state = ck.state()
     assert state["visits"][0]["status"] == "late"
     assert "hasn't arrived yet" in ck.ask("Is the nurse coming?")
+
+
+class SceneDescriber:
+    """Stands in for Bedrock: returns a fixed scene category."""
+
+    def __init__(self, category):
+        self.category = category
+
+    def describe(self, event, image):
+        return {"description": f"Scene: {self.category}.", "category": self.category, "urgency": "routine"}
+
+
+def test_live_view_showing_parcel_becomes_package_event(ck, clock):
+    ck.describer = SceneDescriber("package")
+    ck.handle_event(DoorEvent(id="lv-pkg", device_id=DOOR, kind=EventKind.LIVE_VIEW, ts=clock()))
+    stored = ck.store.list_events()[0]
+    assert stored.kind is EventKind.MOTION and stored.sub_type == "package_delivery"
+    assert ck.ask("Is my parcel outside?").startswith("Yes")
+
+
+def test_live_view_showing_nobody_stays_quiet(ck, clock):
+    ck.describer = SceneDescriber("nobody")
+    ck.handle_event(DoorEvent(id="lv-empty", device_id=DOOR, kind=EventKind.LIVE_VIEW, ts=clock()))
+    assert ck.store.list_events()[0].kind is EventKind.LIVE_VIEW
+    assert ck.ask("Is my parcel outside?") == "No parcels have been delivered today."

@@ -20,6 +20,25 @@ from .vision import BedrockDescriber, Describer, FakeDescriber
 log = logging.getLogger(__name__)
 
 _SEVERITY_BY_URGENCY = {"urgent": Severity.CRITICAL, "attention": Severity.WARNING}
+LIVE_VIEW_FRAME_OFFSET_MS = 5000
+# What a live-view frame shows -> the door event it stands for.
+_LIVE_VIEW_AS = {
+    "package": (EventKind.MOTION, "package_delivery"),
+    "delivery": (EventKind.MOTION, "human"),
+    "visitor": (EventKind.MOTION, "human"),
+    "carer": (EventKind.MOTION, "human"),
+}
+
+
+def _classify_live_view(event: DoorEvent) -> DoorEvent:
+    """Ring live views (e.g. Playground simulations) carry no detection type, so the
+    scene description decides: a parcel becomes a package event, a person a motion
+    event. Anything else stays a plain live view and raises no alerts."""
+    kind_sub = _LIVE_VIEW_AS.get(event.category or "")
+    if not kind_sub:
+        return event
+    kind, sub_type = kind_sub
+    return event.model_copy(update={"kind": kind, "sub_type": sub_type})
 
 
 class CareKey:
@@ -65,9 +84,13 @@ class CareKey:
         if not self.store.add_event(event):
             return None
         image = None
-        if event.kind in (EventKind.MOTION, EventKind.BUTTON_PRESS):
+        if event.kind in (EventKind.MOTION, EventKind.BUTTON_PRESS, EventKind.LIVE_VIEW):
+            # A live view's first frames can be black while the stream starts.
+            offset_ms = LIVE_VIEW_FRAME_OFFSET_MS if event.kind is EventKind.LIVE_VIEW else 0
             try:
-                image = self.ring.snapshot(event.device_id, int(event.ts.timestamp() * 1000))
+                image = self.ring.snapshot(
+                    event.device_id, int(event.ts.timestamp() * 1000) + offset_ms
+                )
             except Exception:
                 log.exception("Snapshot failed for %s", event.id)
         try:
@@ -76,6 +99,8 @@ class CareKey:
             log.exception("Scene description failed for %s", event.id)
             scene = FakeDescriber().describe(event, None)
         event = event.model_copy(update=scene)
+        if event.kind is EventKind.LIVE_VIEW:
+            event = _classify_live_view(event)
         self.store.save_event(event)
 
         entry = self.store.add_timeline(

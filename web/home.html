@@ -141,7 +141,7 @@ function render(s) {
 async function refresh() { render(await CareKey.api("/api/state")); }
 
 CareKey.live((msg) => {
-  if (msg.type === "door_event") {
+  if (msg.type === "door_event" && msg.event.kind !== "live_view") {
     const e = msg.event;
     const tone = e.urgency === "urgent" ? "critical" : e.urgency === "attention" ? "warning" : "info";
     showOverlay(e.description || "Someone is at the front door.", tone, "Front door");

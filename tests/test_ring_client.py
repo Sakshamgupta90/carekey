@@ -63,3 +63,17 @@ def test_history_parses_events_and_skips_unknown_types():
 
     events = client(handler).history("dev1")
     assert [e.sub_type for e in events] == ["package_delivery"]
+
+
+def test_history_on_demand_is_a_live_view():
+    from carekey.models import EventKind
+    from carekey.ring.webhook import parse_history_item
+
+    item = {
+        "type": "history-events",
+        "id": "lv1",
+        "attributes": {"event_type": "on_demand", "start": 1792133618022, "end": 1792133649764},
+        "relationships": {"source": {"data": {"type": "devices", "id": "dev1"}}},
+    }
+    event = parse_history_item(item)
+    assert event.kind is EventKind.LIVE_VIEW

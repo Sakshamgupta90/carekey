@@ -13,6 +13,7 @@ class EventKind(StrEnum):
     BUTTON_PRESS = "button_press"
     DOOR_OPENED = "door_opened"  # contact sensor faulted
     DOOR_CLOSED = "door_closed"  # contact sensor cleared
+    LIVE_VIEW = "live_view"  # Ring "on_demand": a live stream with recorded footage
     OTHER = "other"
 
 
