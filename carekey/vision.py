@@ -95,6 +95,88 @@ class BedrockDescriber:
         return parse_description(text) or self._fallback.describe(event, image)
 
 
+OLLAMA_PROMPT = """This is a frame from a home doorbell camera. In one short plain sentence, \
+say what is at the front door: mention any parcel or package, any person, and any vehicle. \
+Ignore the text and logos overlaid on the image. Never identify or guess who anyone is."""
+
+_NOBODY = re.compile(r"\b(no one|nobody|empty|unoccupied)\b")
+# A negation covers the rest of its clause: "no parcels, people, or vehicles are visible".
+_NEGATED = re.compile(r"\b(no|not|without|nobody|no one|neither|nor)\b[^.;:]*")
+_PACKAGE = re.compile(r"\b(parcels?|packages?|boxes|box|cardboard|deliver(y|ed))\b")
+_PERSON = re.compile(
+    r"\b(person|people|man|woman|men|women|someone|somebody|courier|driver|visitor|child|boy|girl)\b"
+)
+_VEHICLE = re.compile(r"\b(car|cars|van|truck|vehicle|motorbike|motorcycle|bike)\b")
+
+
+def categorize(text: str) -> tuple[str, str]:
+    """(category, urgency) from a free-text scene description.
+
+    Small local models don't follow JSON instructions reliably, so the category comes
+    from the words they use. Errs on the side of "unknown" rather than inventing one.
+    """
+    t = text.lower()
+    positive = _NEGATED.sub(" ", t)  # only what is said to be there
+    person = bool(_PERSON.search(positive))
+    package = bool(_PACKAGE.search(positive))
+    if person and package:
+        return "delivery", "attention"
+    if person:
+        return "visitor", "attention"
+    if package:
+        return "package", "routine"
+    if _VEHICLE.search(positive):
+        return "vehicle", "routine"
+    if positive != t or _NOBODY.search(t):
+        return "nobody", "routine"
+    return "unknown", "routine"
+
+
+class OllamaDescriber:
+    """Describes Ring snapshots with a vision model served by Ollama.
+
+    With a local model the footage never leaves the home computer.
+    """
+
+    def __init__(self, model: str, base_url: str = "http://localhost:11434", timeout: float = 180.0) -> None:
+        import httpx
+
+        self._http = httpx.Client(base_url=base_url, timeout=timeout)
+        self._model = model
+        self._fallback = FakeDescriber()
+
+    def describe(self, event: DoorEvent, image: bytes | None) -> dict:
+        if not image:
+            return self._fallback.describe(event, image)
+        import base64
+
+        resp = self._http.post(
+            "/api/chat",
+            json={
+                "model": self._model,
+                "stream": False,
+                "options": {"temperature": 0},
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": OLLAMA_PROMPT,
+                        "images": [base64.b64encode(image).decode()],
+                    }
+                ],
+            },
+        )
+        resp.raise_for_status()
+        text = (resp.json().get("message") or {}).get("content", "").strip()
+        parsed = parse_description(text)
+        if parsed:
+            return parsed
+        sentence = re.split(r"(?<=[.!?])\s", text, maxsplit=1)[0].strip()
+        if not sentence:
+            return self._fallback.describe(event, image)
+        category, urgency = categorize(sentence)
+        return {"description": sentence[:200], "category": category, "urgency": urgency}
+
+
 def parse_description(text: str) -> dict | None:
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if not match:

@@ -15,7 +15,7 @@ from .ring.client import FakeRingClient, LiveRingClient, RingClient
 from .ring.webhook import parse_webhook
 from .store import Store
 from .timefmt import clock, utcnow
-from .vision import BedrockDescriber, Describer, FakeDescriber
+from .vision import BedrockDescriber, Describer, FakeDescriber, OllamaDescriber
 
 log = logging.getLogger(__name__)
 
@@ -69,6 +69,8 @@ class CareKey:
 
     @staticmethod
     def _make_describer(s: Settings) -> Describer:
+        if s.vision_mode == "ollama":
+            return OllamaDescriber(s.ollama_vision_model, s.ollama_url)
         if s.vision_mode == "bedrock":
             return BedrockDescriber(s.bedrock_vision_model_id, s.aws_region)
         return FakeDescriber()

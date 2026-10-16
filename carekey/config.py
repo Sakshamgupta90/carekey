@@ -36,8 +36,11 @@ class Settings:
     # can't reach this server, e.g. local development without a tunnel).
     ring_poll_seconds: int = 0
 
-    # "fake" uses canned descriptions; "bedrock" sends snapshots to Amazon Bedrock.
+    # "fake" uses canned descriptions; "ollama" uses a vision model served by Ollama
+    # (local by default, so footage stays on this computer); "bedrock" uses Amazon Bedrock.
     vision_mode: str = "fake"
+    ollama_url: str = "http://localhost:11434"
+    ollama_vision_model: str = "moondream"
     # "rules" answers questions without an LLM; "bedrock" uses a Strands agent on Bedrock.
     agent_mode: str = "rules"
     aws_region: str = "us-east-1"
