@@ -4,6 +4,7 @@ __pycache__/
 .pytest_cache/
 .env
 *.db
-samples/spike/
+samples/
+.claude/
 .DS_Store
 submission/

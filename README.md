@@ -28,7 +28,7 @@ Ring track entry for the Build, Ship, Shape: Amazon Developer Hackathon (accessi
 Requires [uv](https://docs.astral.sh/uv/) and Python 3.12+.
 
 ```bash
-git clone <this repo> && cd carekey
+git clone https://github.com/Sakshamgupta90/carekey.git && cd carekey
 cp .env.example .env
 uv sync
 uv run pytest
@@ -50,7 +50,7 @@ Try: book a visit → enter its code on the visitor page (refused, nobody at the
    ```
 3. Find your device ID and check the API responds:
    ```bash
-   uv run python scripts/ring_spike.py
+   uv run python scripts/check_ring.py
    ```
    Put the printed ID in `.env` as `RING_FRONT_DOOR_DEVICE_ID`.
 4. Turn on scene recognition (next section), start the app, then in the Playground use **Simulate live view event → Package**. Within about 20 seconds the parent's screen shows the parcel alert and "Is my parcel outside?" answers yes.
@@ -126,7 +126,7 @@ carekey/
   agent.py      answers questions (rules, or Strands on Bedrock)
 web/            home, family and visitor screens (no build step)
 tests/          unit and API tests
-scripts/        Ring API check script
+scripts/        check_ring.py: verifies a Ring token, device, history and snapshot
 FRICTION_LOG.md developer-experience notes from building on the Ring API
 ```
 

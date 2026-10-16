@@ -1,10 +1,10 @@
 """Check what the Ring API (or a Playground token) actually returns.
 
 Usage:
-    uv run python scripts/ring_spike.py [device_id]
+    uv run python scripts/check_ring.py [device_id]
 
 Prints Ring's raw responses for devices, capabilities, event history and a snapshot,
-and saves each one under samples/spike/ so we can match our parsing to reality.
+and saves each one under samples/ring-check/ for inspection.
 Your token is never printed or saved.
 """
 
@@ -21,7 +21,7 @@ from carekey.config import load_settings  # noqa: E402
 from carekey.ring.client import LiveRingClient, RingError  # noqa: E402
 from carekey.ring.webhook import parse_history_item  # noqa: E402
 
-OUT = Path("samples/spike")
+OUT = Path("samples/ring-check")
 
 
 def save(name: str, resp) -> None:
