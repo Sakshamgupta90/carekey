@@ -6,3 +6,4 @@ __pycache__/
 *.db
 samples/spike/
 .DS_Store
+submission/
