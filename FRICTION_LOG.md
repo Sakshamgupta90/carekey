@@ -21,7 +21,7 @@ Format: task · steps · expected vs actual · severity (low / medium / high) ·
 - **Steps:** `POST /v1/devices/{id}/media/image/download` with `{"type": "at_timestamp", "timestamp": <ms>}`.
 - **Expected vs actual:** The reference documents the request body but not the response. Expected image bytes; got `HTTP 303` with an empty body and a `Location` on a different host (`download-ap-northeast-1.prod.phoenix.devices.amazon.dev`). Following it returned the JPEG, or `416 MEDIA_NOT_FOUND` when nothing was recorded at that time.
 - **Severity:** Medium. An HTTP client that doesn't follow redirects silently gets nothing; one that follows them with default settings may forward the bearer token to another host.
-- **Workaround:** Follow the redirect with a separate client that sends no token; treat 416 as "no image". Published as `ring-partner-kit`.
+- **Workaround:** Follow the redirect with a separate client that sends no token; treat 416 as "no image".
 - **Suggestion:** Document the 303 + download-host flow, whether the token must be dropped, and the 416 body, with an example.
 
 ### 3. Playground environment isn't described in the API reference
@@ -48,7 +48,7 @@ Format: task · steps · expected vs actual · severity (low / medium / high) ·
 - **Steps:** Compared the Notifications and Event History sections.
 - **Expected vs actual:** A doorbell press is `button_press` in webhooks but `ding` in history; motion is `motion_detected` vs `motion` / `motion.<subtype>`; live views (`on_demand`) appear only in history. There's no mapping table in one place.
 - **Severity:** Low.
-- **Workaround:** A mapping table in our parser (`ring-partner-kit`).
+- **Workaround:** A mapping table in our parser (`carekey/ring/webhook.py`).
 - **Suggestion:** Add a cross-reference table of event names to both sections.
 
 ### 6. Webhook signature has no worked example
@@ -57,7 +57,7 @@ Format: task · steps · expected vs actual · severity (low / medium / high) ·
 - **Steps:** Read the Notifications section of the API reference.
 - **Expected vs actual:** The algorithm is stated (HMAC-SHA256 over raw body bytes, hex, `sha256=` prefix), but there's no worked example (body, key, expected header) to test an implementation against.
 - **Severity:** Low.
-- **Workaround:** Wrote our own round-trip tests and published a test vector in `ring-partner-kit`.
+- **Workaround:** Wrote our own round-trip tests.
 - **Suggestion:** Add a test vector to the docs.
 
 ### 7. Amazon Bedrock unusable on a new account
